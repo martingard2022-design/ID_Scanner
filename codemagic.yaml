@@ -4,12 +4,12 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 30
     scripts:
-      - name: Initialize Clean Flutter App
+      - name: Build Project
         script: |
-          rm -rf *
-          flutter create --org com.example id_scanner .
-      - name: Add Dependencies and Main Code
-        script: |
+          find . -maxdepth 1 ! -name 'codemagic.yaml' ! -name '.' -exec rm -rf {} +
+          flutter create id_scanner
+          cd id_scanner
+
           cat << 'EOF' > pubspec.yaml
           name: id_scanner
           description: "ID Scanner App"
@@ -172,11 +172,8 @@ workflows:
             }
           }
           EOF
-      - name: Fetch Dependencies
-        script: |
+
           flutter pub get
-      - name: Build Android APK
-        script: |
           flutter build apk --release
     artifacts:
-      - build/app/outputs/flutter-apk/*.apk
+      - id_scanner/build/app/outputs/flutter-apk/*.apk
