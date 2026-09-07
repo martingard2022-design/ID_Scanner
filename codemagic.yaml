@@ -19,7 +19,7 @@ workflows:
 
           android {
               namespace "com.example.id_scanner"
-              compileSdk 34
+              compileSdk 35
 
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_1_8
@@ -33,7 +33,7 @@ workflows:
               defaultConfig {
                   applicationId "com.example.id_scanner"
                   minSdk 24
-                  targetSdk 34
+                  targetSdk 35
                   versionCode 1
                   versionName "1.0"
               }
