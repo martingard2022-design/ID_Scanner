@@ -1,0 +1,231 @@
+workflows:
+  android-workflow:
+    name: Android Build
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    scripts:
+      - name: Create Flutter Project
+        script: |
+          cd ..
+          flutter create --org com.woreda06 --project-name id_scanner temp_app
+          cp -r temp_app/* $CM_BUILD_DIR/
+      - name: Set up pubspec and main
+        script: |
+          cat << 'EOF' > pubspec.yaml
+          name: id_scanner
+          description: Woreda 06 ID Scanner App
+          publish_to: 'none'
+          version: 1.0.0+1
+          environment:
+            sdk: '>=3.0.0 <4.0.0'
+          dependencies:
+            flutter:
+              sdk: flutter
+            mobile_scanner: ^3.5.5
+            google_mlkit_text_recognition: ^0.11.0
+            excel: ^4.0.0
+            path_provider: ^2.1.2
+            permission_handler: ^11.3.1
+          flutter:
+            uses-material-design: true
+          EOF
+
+          cat << 'EOF' > lib/main.dart
+          import 'dart:convert';
+          import 'dart:io';
+          import 'package:flutter/material.dart';
+          import 'package:mobile_scanner/mobile_scanner.dart';
+          import 'package:excel/excel.dart';
+          import 'package:path_provider/path_provider.dart';
+          import 'package:permission_handler/permission_handler.dart';
+
+          void main() {
+            runApp(const MaterialApp(
+              debugShowCheckedModeBanner: false,
+              home: IDScannerApp(),
+            ));
+          }
+
+          class IDScannerApp extends StatefulWidget {
+            const IDScannerApp({super.key});
+            @override
+            State<IDScannerApp> createState() => _IDScannerAppState();
+          }
+
+          class _IDScannerAppState extends State<IDScannerApp> {
+            String rawQrData = "QR ኮድ አልተነበበም";
+            String decodedQrData = "ያልተፈታ መረጃ";
+            bool isScanning = true;
+
+            @override
+            void initState() {
+              super.initState();
+              _requestPermissions();
+            }
+
+            Future<void> _requestPermissions() async {
+              await Permission.camera.request();
+              await Permission.storage.request();
+            }
+
+            String _tryDecodeQr(String input) {
+              try {
+                List<int> bytes = base64.decode(input);
+                return utf8.decode(bytes);
+              } catch (e) {
+                return input;
+              }
+            }
+
+            Future<void> _saveToExcel() async {
+              if (decodedQrData == "ያልተፈታ መረጃ") {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("እባክዎን አስቀድመው QR ኮድ ስካን ያድርጉ!")),
+                );
+                return;
+              }
+
+              var excel = Excel.createExcel();
+              Sheet sheetObject = excel['Matawekiya_Data'];
+
+              sheetObject.appendRow([
+                TextCellValue('ተ/ቁ'),
+                TextCellValue('ቀን'),
+                TextCellValue('የተፈታ የQR መረጃ (Decoded)'),
+                TextCellValue('Raw QR Data')
+              ]);
+
+              sheetObject.appendRow([
+                TextCellValue('1'),
+                TextCellValue(DateTime.now().toString().split(' ')[0]),
+                TextCellValue(decodedQrData),
+                TextCellValue(rawQrData)
+              ]);
+
+              try {
+                Directory? directory = await getExternalStorageDirectory();
+                String filePath = "${directory!.path}/Matawekiya_List.xlsx";
+
+                List<int>? fileBytes = excel.save();
+                if (fileBytes != null) {
+                  File(filePath)
+                    ..createSync(recursive: true)
+                    ..writeAsBytesSync(fileBytes);
+
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("መረጃው ኤክሴል ላይ ተመዝግቧል!\nቦታ: $filePath"),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("ኤክሴል ሴቭ ማድረግ አልተቻለም: $e")),
+                  );
+                }
+              }
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text("ወረዳ 06 - ID Scanner & Decoder"),
+                  backgroundColor: Colors.blueAccent,
+                ),
+                body: Column(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: MobileScanner(
+                        onDetect: (capture) {
+                          if (!isScanning) return;
+                          final List<Barcode> barcodes = capture.barcodes;
+                          for (final barcode in barcodes) {
+                            if (barcode.rawValue != null) {
+                              setState(() {
+                                rawQrData = barcode.rawValue!;
+                                decodedQrData = _tryDecodeQr(rawQrData);
+                                isScanning = false;
+                              });
+                              break;
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "የተፈታ መረጃ (Decoded Result):",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            const SizedBox(height: 5),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: SingleChildScrollView(
+                                child: Text(
+                                  decodedQrData,
+                                  style: const TextStyle(fontSize: 13, color: Colors.black80),
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () {
+                                      setState(() {
+                                        isScanning = true;
+                                        rawQrData = "QR ኮድ አልተነበበም";
+                                        decodedQrData = "ያልተፈታ መረጃ";
+                                      });
+                                    },
+                                    icon: const Icon(Icons.qr_code_scanner),
+                                    label: const Text("እንደገና ስካን"),
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _saveToExcel,
+                                    icon: const Icon(Icons.save),
+                                    label: const Text("Excel ላይ መዝግብ"),
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                  ),
+                                ),
+                              ],
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+          EOF
+
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build Android APK
+        script: flutter build apk --release
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
