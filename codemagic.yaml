@@ -6,9 +6,9 @@ workflows:
     scripts:
       - name: Create Flutter Project
         script: |
-          cd ..
-          flutter create --org com.example id_scanner
-          cp -r temp_app/* $CM_BUILD_DIR/
+          mkdir -p temp_app
+          flutter create --org com.example temp_app
+          cp -r temp_app/* .
       - name: Set up pubspec and native config files
         script: |
           cat << 'EOF' > pubspec.yaml
