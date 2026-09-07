@@ -10,6 +10,46 @@ workflows:
           flutter create id_scanner
           cd id_scanner
 
+          cat << 'EOF' > android/app/build.gradle
+          plugins {
+              id "com.android.application"
+              id "kotlin-android"
+              id "dev.flutter.flutter-gradle-plugin"
+          }
+
+          android {
+              namespace "com.example.id_scanner"
+              compileSdk 34
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+
+              kotlinOptions {
+                  jvmTarget = '1.8'
+              }
+
+              defaultConfig {
+                  applicationId "com.example.id_scanner"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.debug
+                  }
+              }
+          }
+
+          flutter {
+              source '../..'
+          }
+          EOF
+
           cat << 'EOF' > android/app/src/main/AndroidManifest.xml
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.CAMERA" />
@@ -109,15 +149,23 @@ workflows:
 
           class _ScannerHomePageState extends State<ScannerHomePage> {
             final List<List<String>> _scannedData = [];
+            late MobileScannerController controller;
 
             @override
             void initState() {
               super.initState();
+              controller = MobileScannerController();
               _requestPermissions();
             }
 
             Future<void> _requestPermissions() async {
               await Permission.camera.request();
+            }
+
+            @override
+            void dispose() {
+              controller.dispose();
+              super.dispose();
             }
 
             Future<void> _exportToExcel() async {
@@ -183,6 +231,7 @@ workflows:
                     SizedBox(
                       height: 300,
                       child: MobileScanner(
+                        controller: controller,
                         onDetect: (capture) {
                           final List<Barcode> barcodes = capture.barcodes;
                           for (final barcode in barcodes) {
